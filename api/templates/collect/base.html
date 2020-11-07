@@ -1,0 +1,194 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Collect</title>
+
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+	<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+	<script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+
+	<script src="https://cdn.jsdelivr.net/npm/vue@2.6.0"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.0/axios.min.js"></script>
+</head>
+<body>
+	<div class="col-md-2"></div>
+	<div class="col-md-8 container" id="app">
+		<div class="row" v-if="showProgressBar">
+			<div class="col-md-11 progress">
+				<div class="progress-bar" role="progressbar" :style="{width: progress + '%'}" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">[[ progress ]] %</div>
+			</div>
+			<div class="col-md-1">
+				<button type="button" @click.prevent="stopTask()" class="btn btn-danger btn-sm">Stop</button>
+			</div>
+		</div>
+		<small id="show_message"></small>
+		<div class="custom-file">
+			<input type="file" v-model="file" class="custom-file-input" id="customFile" onchange="fileName(this)">
+			<label class="custom-file-label" for="customFile" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel">Choose file</label>
+			<small v-show="fileError" style="color: red;">File field is required.</small>
+		</div>
+		<button :disabled="isSubmit" type="button" @click.prevent="isSubmit=true; uploadFile()" class="btn btn-primary" style="margin-top: 10px; float: right;">Submit</button>
+		<button type="button" @click.prevent="exportData()" class="btn btn-primary" style="margin-top: 10px; margin-right: 10px; float: right;">Export</button>
+		<br><br><br>
+		<div v-show="download">If file is not downloaded automatically, click <a id="link" href="">here</a></div>
+	</div>
+	<div class="col-md-2"></div>
+
+	<div class="toast" id="myToast" style="position: absolute; top: 20px; right: 20px;">
+        <div class="toast-header">
+            <strong class="mr-auto"><i class="fab fa-grav"></i><span id="toast_title"></span></strong>
+            <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div class="toast-body">
+            <div id="toast_body">Text Here</div>
+        </div>
+    </div>
+
+	<style type="text/css">
+		.container {
+			margin: 100px auto;
+		}
+	</style>
+	<script>
+		function fileName(ele){
+            var fileName = $(ele).val();
+            // console.log(fileName.split('\\'))
+            $(ele).next('.custom-file-label').html(fileName.split('\\').pop());
+        }
+
+		var csrf_token = "{{ csrf_token }}"
+		var app = new Vue({
+			delimiters: ['[[', ']]'],
+			el: '#app',
+			data: {
+				progress: 0,
+				showProgressBar: false,
+				taskId: '',
+				interval: '',
+				isSubmit: false,
+				download: false,
+				file: '',
+				fileError: false
+			},
+			methods: {
+				uploadFile: function() {
+					let vm = this
+					vm.download = false;
+					if (vm.file) {
+						vm.fileError = false;
+						axios.post('/upload/', {
+							"csrfmiddlewaretoken": csrf_token,
+							"file": vm.file
+						}).then(function(response) {
+							vm.file = ''
+							vm.showProgressBar = true
+							vm.taskId = response.data.task_id
+							localStorage.setItem('task_id', vm.taskId)
+							localStorage.setItem('type', 'upload')
+							$("#toast_title").html(response.data.status)
+							$('#toast_body').html(response.data.message)
+							$("#myToast").toast({
+								delay: 5000
+							});
+							$("#myToast").toast('show');
+							$("#show_message").html('Importing....')
+						})
+					} else {
+						vm.fileError = true;
+						vm.isSubmit = false;
+					}
+				},
+
+				getStatus: function() {
+					let vm = this
+					if (vm.taskId) {
+						axios.get('/upload/'+this.taskId
+							).then(function(response) {
+								if (response.data.result.state == 'SUCCESS') {
+									vm.progress = 100
+									vm.taskId = ''
+									vm.isSubmit = false
+									localStorage.removeItem('task_id')
+									vm.showProgressBar = false
+									vm.progress = 0
+									$('.custom-file-label').html('Choose file')
+									$("#show_message").html('Task Completed.')
+									if (response.data.result.result != true) {
+										$("#link").attr("href", response.data.result.file)
+										$("#link").attr("download", "")
+										$("#link")[0].click()
+										vm.download = true
+									}
+								} else {
+									// console.log(response.data.result.done.done);
+									vm.progress = response.data.result.done.done
+								}
+							})
+					}
+				},
+				stopTask: function() {
+					let vm = this
+					if (vm.taskId) {
+						axios.put('/upload/'+vm.taskId
+							).then(function(response) {
+								vm.showProgressBar = false
+								vm.progress = 0
+								vm.taskId = ''
+								vm.isSubmit = false
+								$('.custom-file-label').html('Choose file')
+								localStorage.removeItem('task_id')
+								localStorage.removeItem('type')
+								$("#toast_title").html(response.data.status)
+								$('#toast_body').html(response.data.message)
+								$("#myToast").toast({
+									delay: 5000
+								});
+								$("#myToast").toast('show');
+								$("#show_message").html('')
+						})
+					}
+				},
+				exportData: function() {
+					let vm = this
+					vm.download = false
+					axios.get('/export/'
+						).then(function(response) {
+							vm.showProgressBar = true
+							vm.taskId = response.data.task_id
+							localStorage.setItem('task_id', vm.taskId)
+							localStorage.setItem('type', 'download')
+							$("#toast_title").html(response.data.status)
+							$('#toast_body').html(response.data.message)
+							$("#myToast").toast({
+								delay: 5000
+							});
+							$("#myToast").toast('show');
+							$("#show_message").html('Exporting....')
+							// console.log(response)
+						})
+				}
+			},
+			created() {
+				this.interval = setInterval(() => this.getStatus(), 2000);
+				let task_id = localStorage.getItem('task_id')
+				if (task_id) {
+					this.taskId = task_id
+					this.showProgressBar = true
+					let type = localStorage.getItem('type')
+					if(type == 'download') {
+						$("#show_message").html('Exporting....')
+					} else {
+						$("#show_message").html('Importing....')
+					}
+				}
+				console.log(this.taskId)
+			},
+		});
+	</script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+	<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+</body>
+</html>

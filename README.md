@@ -1,4 +1,4 @@
-# Atlan_Task
+# Atlan Backend Task
 
 ## Introduction
 
@@ -9,9 +9,6 @@ Technologies/Tools Used:
   - Django
   - Celery
   - Redis
-  - Gunicorn
-  - VueJs
-  - Bootstrap
  
 ## Run the production build of project in Docker Container
 Make sure you have [Docker](https://docs.docker.com/installation/) and [docker-compose](http://docs.docker.com/compose/install/) installed in your system.
